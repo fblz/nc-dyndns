@@ -1,0 +1,7 @@
+{
+  "customernumber": 0,
+  "apipassword": "",
+  "apikey": "",
+  "allowed_domains": ["example.com"],
+	"allowed_hosts": ["test"]
+}

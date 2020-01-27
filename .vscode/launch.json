@@ -11,7 +11,7 @@
       "mode": "auto",
       "program": "${fileDirname}",
       "env": {},
-      "args": ["-domain", "fblz.de", "-host", "testhost", "-ip", "134.130.4.1"]
+      "args": ["-config", ".\\config.json"]
     }
   ]
 }
