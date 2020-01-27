@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
+	"syscall"
 	"time"
 )
 
@@ -307,7 +309,18 @@ func (nc *netcupAPI) DynDNSHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := nc.updateDNSHostname(hostname[0], domain[0], ip[0])
+	var err error
+
+	for index := 0; index < 5; index++ {
+		err = nc.updateDNSHostname(hostname[0], domain[0], ip[0])
+		reset, ok := err.(*net.OpError)
+
+		if !ok || reset.Err.Error() != syscall.ECONNRESET.Error() {
+			break
+		}
+
+		time.Sleep(200 * time.Millisecond)
+	}
 
 	if err != nil {
 		fmt.Println(err)
