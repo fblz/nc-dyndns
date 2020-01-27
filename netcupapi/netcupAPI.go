@@ -315,5 +315,7 @@ func (nc *netcupAPI) DynDNSHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Fprintf(w, "Updated IP Address to %s\n", ip)
+	msg := fmt.Sprintf("Updated IP Address to %s", ip)
+	fmt.Println(msg)
+	fmt.Fprint(w, msg)
 }
