@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"syscall"
 	"time"
 )
 
@@ -310,16 +309,20 @@ func (nc *netcupAPI) DynDNSHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var err error
+	interval := 200
 
 	for index := 0; index < 5; index++ {
 		err = nc.updateDNSHostname(hostname[0], domain[0], ip[0])
-		reset, ok := err.(*net.OpError)
+		_, ok := err.(net.Error)
 
-		if !ok || reset.Err.Error() != syscall.ECONNRESET.Error() {
+		if !ok {
 			break
 		}
 
-		time.Sleep(200 * time.Millisecond)
+		fmt.Printf("Encountered network error. Retrying in %d seconds.\n%v\n", interval, err)
+
+		time.Sleep(time.Duration(interval) * time.Millisecond)
+		interval += interval
 	}
 
 	if err != nil {
