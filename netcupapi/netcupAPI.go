@@ -223,15 +223,23 @@ func (nc *netcupAPI) updateDNSHostname(hostname string, domain string, ip string
 	}
 
 	entry := zone.firstOrNewRecord(hostname, "A")
-	entry.Destination = ip
-	answer, err = callNCAPI(request{"updateDnsRecords", updateDNSRecords{domain, nc.Customernumber, nc.Apikey, session.Apisessionid, dnsRecordSet{[]dnsRecord{*entry}}}})
 
-	if err != nil {
-		return err
-	}
+	if entry.Destination != ip {
+		old := entry.Destination
+		entry.Destination = ip
+		answer, err = callNCAPI(request{"updateDnsRecords", updateDNSRecords{domain, nc.Customernumber, nc.Apikey, session.Apisessionid, dnsRecordSet{[]dnsRecord{*entry}}}})
 
-	if answer.Status != "success" {
-		return fmt.Errorf("%+v", *answer)
+		if err != nil {
+			return err
+		}
+
+		if answer.Status != "success" {
+			return fmt.Errorf("%+v", *answer)
+		}
+
+		fmt.Printf("IP Address changed from %v to %v\n", old, ip)
+	} else {
+		fmt.Println("IP Address did not change.")
 	}
 
 	answer, err = callNCAPI(request{"logout", logout{nc.Customernumber, nc.Apikey, session.Apisessionid}})
@@ -331,7 +339,5 @@ func (nc *netcupAPI) DynDNSHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	msg := fmt.Sprintf("Updated IP Address to %s", ip[0])
-	fmt.Println(msg)
-	fmt.Fprint(w, msg)
+	fmt.Fprint(w, "success")
 }
