@@ -2,6 +2,8 @@
   "customernumber": 0,
   "apipassword": "",
   "apikey": "",
-  "allowed_domains": ["example.com"],
-	"allowed_hosts": ["test"]
+  "authorized_hosts": [
+    {"hostname": "test", "domain": "example.de", "token": ""},
+    {"hostname": "test", "domain": "example.org", "token": ""}
+  ]
 }

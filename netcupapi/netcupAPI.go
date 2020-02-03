@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 )
@@ -153,15 +154,27 @@ func callNCAPI(payload request) (*answer, error) {
 	return &answer, nil
 }
 
-type netcupAPI struct {
-	Customernumber int      `json:"customernumber"`
-	Apikey         string   `json:"apikey"`
-	Apipassword    string   `json:"apipassword"`
-	AllowedDomains []string `json:"allowed_domains"`
-	AllowedHosts   []string `json:"allowed_hosts"`
+type host struct {
+	Hostname string `json:"hostname"`
+	Domain   string `json:"domain"`
+	Token    string `json:"token"`
+	IP       string `json:"-"`
 }
 
-func New(configPath string) (*netcupAPI, error) {
+func (h *host) Key() string {
+	return h.Hostname + "." + h.Domain
+}
+
+// NetcupAPI provides a incomplete netcup API to set A names
+type NetcupAPI struct {
+	Customernumber  int    `json:"customernumber"`
+	Apikey          string `json:"apikey"`
+	Apipassword     string `json:"apipassword"`
+	AuthorizedHosts []host `json:"authorized_hosts"`
+}
+
+// New reads the configuration file and creates a API object
+func New(configPath string) (*NetcupAPI, error) {
 	confFile, err := os.Open(configPath)
 	if err != nil {
 		return nil, err
@@ -175,7 +188,7 @@ func New(configPath string) (*netcupAPI, error) {
 		return nil, err
 	}
 
-	this := new(netcupAPI)
+	this := new(NetcupAPI)
 	err = json.Unmarshal(confBytes, this)
 
 	if err != nil {
@@ -185,7 +198,7 @@ func New(configPath string) (*netcupAPI, error) {
 	return this, nil
 }
 
-func (nc *netcupAPI) updateDNSHostname(hostname string, domain string, ip string) error {
+func (nc *NetcupAPI) updateDNSHostname(host *host, ip net.IP) error {
 	answer, err := callNCAPI(request{"login", login{nc.Customernumber, nc.Apikey, nc.Apipassword}})
 
 	if err != nil {
@@ -202,7 +215,7 @@ func (nc *netcupAPI) updateDNSHostname(hostname string, domain string, ip string
 		return err
 	}
 
-	answer, err = callNCAPI(request{"infoDnsRecords", infoDNSRecords{domain, nc.Customernumber, nc.Apikey, session.Apisessionid}})
+	answer, err = callNCAPI(request{"infoDnsRecords", infoDNSRecords{host.Domain, nc.Customernumber, nc.Apikey, session.Apisessionid}})
 
 	if err != nil {
 		return err
@@ -222,24 +235,17 @@ func (nc *netcupAPI) updateDNSHostname(hostname string, domain string, ip string
 		return fmt.Errorf("%+v", *answer)
 	}
 
-	entry := zone.firstOrNewRecord(hostname, "A")
+	entry := zone.firstOrNewRecord(host.Hostname, "A")
 
-	if entry.Destination != ip {
-		old := entry.Destination
-		entry.Destination = ip
-		answer, err = callNCAPI(request{"updateDnsRecords", updateDNSRecords{domain, nc.Customernumber, nc.Apikey, session.Apisessionid, dnsRecordSet{[]dnsRecord{*entry}}}})
+	entry.Destination = ip.String()
+	answer, err = callNCAPI(request{"updateDnsRecords", updateDNSRecords{host.Domain, nc.Customernumber, nc.Apikey, session.Apisessionid, dnsRecordSet{[]dnsRecord{*entry}}}})
 
-		if err != nil {
-			return err
-		}
+	if err != nil {
+		return err
+	}
 
-		if answer.Status != "success" {
-			return fmt.Errorf("%+v", *answer)
-		}
-
-		fmt.Printf("IP Address changed from %v to %v\n", old, ip)
-	} else {
-		fmt.Println("IP Address did not change.")
+	if answer.Status != "success" {
+		return fmt.Errorf("%+v", *answer)
 	}
 
 	answer, err = callNCAPI(request{"logout", logout{nc.Customernumber, nc.Apikey, session.Apisessionid}})
@@ -255,72 +261,89 @@ func (nc *netcupAPI) updateDNSHostname(hostname string, domain string, ip string
 	return nil
 }
 
-func (nc *netcupAPI) domainAllowed(domain string) bool {
-	for i := range nc.AllowedDomains {
-		if nc.AllowedDomains[i] == domain {
-			return true
+func (nc *NetcupAPI) getHost(fqdn string) (*host, error) {
+	for i := range nc.AuthorizedHosts {
+		if nc.AuthorizedHosts[i].Key() == fqdn {
+			return &nc.AuthorizedHosts[i], nil
 		}
 	}
-	return false
+
+	return nil, fmt.Errorf("Unknown fqdn %s", fqdn)
 }
 
-func (nc *netcupAPI) hostnameAllowed(hostname string) bool {
-	for i := range nc.AllowedHosts {
-		if nc.AllowedHosts[i] == hostname {
-			return true
+func validateQuery(query url.Values) (map[string]string, error) {
+	params := []string{"fqdn", "ipv4", "token"}
+	validQuery := make(map[string]string)
+
+	for _, param := range params {
+		queryItems, ok := query[param]
+
+		if !ok || len(queryItems) < 1 {
+			return nil, fmt.Errorf("Parameter %s is missing", param)
 		}
+
+		validQuery[param] = queryItems[0]
 	}
-	return false
+
+	return validQuery, nil
 }
 
-func (nc *netcupAPI) DynDNSHandler(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
-	hostname, ok := query["hostname"]
+// DynDNSHandler provides a handler function for the web package
+func (nc *NetcupAPI) DynDNSHandler(w http.ResponseWriter, r *http.Request) {
+	query, err := validateQuery(r.URL.Query())
 
-	if !ok || len(hostname) < 1 {
-		msg := "Parameter hostname is missing."
-		fmt.Println(msg)
-		http.Error(w, msg, http.StatusBadRequest)
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "Missing or invalid parameter(s)", http.StatusBadRequest)
 		return
 	}
 
-	domain, ok := query["domain"]
+	//validate ip by parsing it in go
+	ip := net.ParseIP(query["ipv4"])
 
-	if !ok || len(domain) < 1 {
-		msg := "Parameter domain is missing."
-		fmt.Println(msg)
-		http.Error(w, msg, http.StatusBadRequest)
+	if ip == nil {
+		fmt.Printf("Invalid IP Address %s\n", query["ipv4"])
+		http.Error(w, "Missing or invalid parameter(s)", http.StatusBadRequest)
 		return
 	}
 
-	ip, ok := query["ip"]
+	//validate ipv4 by converting
+	ip = ip.To4()
 
-	if !ok || len(ip) < 1 {
-		msg := "Parameter ip is missing."
-		fmt.Println(msg)
-		http.Error(w, msg, http.StatusBadRequest)
+	if ip == nil {
+		fmt.Printf("IP Address %s is not v4\n", query["ipv4"])
+		http.Error(w, "Missing or invalid parameter(s)", http.StatusBadRequest)
 		return
 	}
 
-	if !nc.domainAllowed(domain[0]) {
-		msg := fmt.Sprintf("Domain %s is not allowed.", domain[0])
-		fmt.Println(msg)
-		http.Error(w, msg, http.StatusForbidden)
+	//validate fqdn by searching it in the config file
+	host, err := nc.getHost(query["fqdn"])
+
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "Not authorized to set this fqdn", http.StatusForbidden)
 		return
 	}
 
-	if !nc.hostnameAllowed(hostname[0]) {
-		msg := fmt.Sprintf("Hostname %s not allowed.", hostname[0])
-		fmt.Println(msg)
-		http.Error(w, msg, http.StatusForbidden)
+	//validate token by searching in the config file
+	if host.Token != query["token"] {
+		fmt.Printf("Invalid token supplied for fqdn %s\n", host.Key())
+		http.Error(w, "Not authorized to set this fqdn", http.StatusForbidden)
 		return
 	}
 
-	var err error
+	if host.IP == ip.String() {
+		fmt.Println("IP did not change")
+		fmt.Fprint(w, "success")
+		return
+	}
+
+	fmt.Printf("Changing IP Address from %v to %v\n", host.IP, ip.String())
+
 	interval := 200
 
 	for index := 0; index < 5; index++ {
-		err = nc.updateDNSHostname(hostname[0], domain[0], ip[0])
+		err = nc.updateDNSHostname(host, ip)
 		_, ok := err.(net.Error)
 
 		if !ok {
@@ -335,9 +358,12 @@ func (nc *netcupAPI) DynDNSHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		fmt.Println(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Something unexpected happened", http.StatusInternalServerError)
 		return
 	}
 
+	host.IP = ip.String()
+
+	fmt.Println("Success")
 	fmt.Fprint(w, "success")
 }
