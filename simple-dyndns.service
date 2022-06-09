@@ -1,0 +1,9 @@
+[Unit]
+Description=The simple-dyndns tool provides a http api to dynamically set an dns a name
+After=network-online.target
+
+[Service]
+ExecStart=/root/go/bin/simple-dyndns -config /etc/simple-dyndns/config.json
+
+[Install]
+WantedBy=multi-user.target

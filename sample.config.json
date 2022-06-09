@@ -1,0 +1,26 @@
+[
+	{
+		"----COMMENT----": "Mimimal required information.",
+		"_-_-COMMENT-_-_": "Non existent records will be created upon start.",
+		"hostname": "test",
+		"zone": "example.de",
+		"+---COMMENT---+": "This is an api *token* *not a key* with access to the zones DNS.",
+		"api_token": "BLAHBLAHBLAHBLUBBERFASEL"
+	},
+	{
+		"hostname": "test",
+		"zone": "example.com",
+		"api_token": "BLAHBLAHBLAHBLUBBERFASEL",
+		"----COMMENT----": "If web_token is not specified, it is generated upon start.",
+		"web_token": "ARATAARARATARARATARARTARARARTATRA"
+	},
+	{
+		"hostname": "test",
+		"zone": "example.org",
+		"api_token": "ZOMGLULOMGWUTWHYWTFNO",
+		"----COMMENT----": "zone_id and record_id are fetched upon start.",
+		"zone_id": "adw98a9d9wa823",
+		"record_id": "f387978932f322",
+		"web_token": "DWAASDWAASDWAASDWAAS"
+	}
+]

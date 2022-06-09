@@ -1,9 +1,0 @@
-{
-  "customernumber": 0,
-  "apipassword": "",
-  "apikey": "",
-  "authorized_hosts": [
-    {"hostname": "test", "domain": "example.de", "token": ""},
-    {"hostname": "test", "domain": "example.org", "token": ""}
-  ]
-}

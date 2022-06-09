@@ -1,9 +1,0 @@
-[Unit]
-Description=The nc-dyndns tool provides a http api to dynamically set an dns a name
-After=network-online.target
-
-[Service]
-ExecStart=/root/go/bin/nc-dyndns -config /etc/nc-dyndns/config.json
-
-[Install]
-WantedBy=multi-user.target
