@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"net"
 	"strings"
 
@@ -52,11 +53,7 @@ func (h *Host) populateAPIInfo() error {
 	}
 
 	if strings.TrimSpace(h.RecordID) == "" {
-		ctx := context.Background()
-		var filter cloudflare.DNSRecord
-		filter.Name = h.FQDN()
-		filter.Type = "A"
-		records, err := api.DNSRecords(ctx, h.ZoneID, filter)
+		records, _, err := api.ListDNSRecords(context.Background(), cloudflare.ZoneIdentifier(h.ZoneID), cloudflare.ListDNSRecordsParams{Name: h.FQDN(), Type: "A"})
 		if err != nil {
 			return err
 		}
@@ -78,8 +75,7 @@ func (h *Host) populateAPIInfo() error {
 	}
 
 	if strings.TrimSpace(h.IP) == "" {
-		ctx := context.Background()
-		record, err := api.DNSRecord(ctx, h.ZoneID, h.RecordID)
+		record, err := api.GetDNSRecord(context.Background(), cloudflare.ZoneIdentifier(h.ZoneID), h.RecordID)
 		if err != nil {
 			return err
 		}
@@ -111,16 +107,16 @@ func (h *Host) updateIP(ip net.IP) error {
 		return err
 	}
 
-	var record cloudflare.DNSRecord
-	record.Content = ip.String()
-
-	ctx := context.Background()
-	err = api.UpdateDNSRecord(ctx, h.ZoneID, h.RecordID, record)
+	record, err := api.UpdateDNSRecord(context.Background(), cloudflare.ZoneIdentifier(h.ZoneID), cloudflare.UpdateDNSRecordParams{ID: h.RecordID, Content: ip.String()})
 	if err != nil {
 		return err
 	}
 
-	h.IP = ip.String()
+	if record.Content != ip.String() {
+		return fmt.Errorf("After UpdateDNSRecord, Cloudflare API did not reflect the IP changes on host " + h.Hostname)
+	}
+
+	h.IP = record.Content
 	return nil
 }
 
@@ -130,18 +126,11 @@ func (h *Host) createRecord() (*cloudflare.DNSRecord, error) {
 		return nil, err
 	}
 
-	var record cloudflare.DNSRecord
-	record.Name = h.FQDN()
-	record.Type = "A"
-	record.Content = "0.0.0.0"
-	record.TTL = 300
 	proxy := false
-	record.Proxied = &proxy
-
-	result, err := api.CreateDNSRecord(context.Background(), h.ZoneID, record)
+	result, err := api.CreateDNSRecord(context.Background(), cloudflare.ZoneIdentifier(h.ZoneID), cloudflare.CreateDNSRecordParams{Name: h.FQDN(), Type: "A", Content: "0.0.0.0", TTL: 300, Proxied: &proxy})
 	if err != nil {
 		return nil, err
 	}
 
-	return &result.Result, nil
+	return &result, nil
 }
