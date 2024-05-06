@@ -126,6 +126,8 @@ func (h *Host) createRecord() (*cloudflare.DNSRecord, error) {
 		return nil, err
 	}
 
+	// Context for why this pointer to bool is required
+	// https://github.com/cloudflare/cloudflare-go/issues/568
 	proxy := false
 	result, err := api.CreateDNSRecord(context.Background(), cloudflare.ZoneIdentifier(h.ZoneID), cloudflare.CreateDNSRecordParams{Name: h.FQDN(), Type: "A", Content: "0.0.0.0", TTL: 300, Proxied: &proxy})
 	if err != nil {
