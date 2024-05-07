@@ -3,7 +3,36 @@ Description=The simple-dyndns tool provides a http api to dynamically set an dns
 After=network-online.target
 
 [Service]
-ExecStart=/root/go/bin/simple-dyndns -config /etc/simple-dyndns/config.json
+Type=simple
+DynamicUser=yes
+ExecStart=/opt/simple-dyndns/simple-dyndns -config /var/lib/simple-dyndns/config.json
+StateDirectory=simple-dyndns
+
+MemoryDenyWriteExecute=true
+ProtectKernelModules=true
+NoNewPrivileges=true
+UMask=0007
+
+PrivateDevices=true
+PrivateUsers=true
+
+ProtectClock=true
+ProtectHome=true
+ProtectKernelLogs=true
+ProtectProc=invisible
+ProtectHostname=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+
+CapabilityBoundingSet=
+
+SystemCallArchitectures=native
+SystemCallFilter=@system-service @file-system @network-io
+SystemCallFilter=~@privileged
+
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictRealtime=true
+RestrictNamespaces=true
 
 [Install]
 WantedBy=multi-user.target
