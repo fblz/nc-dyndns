@@ -1,6 +1,6 @@
 module simple-dyndns
 
-go 1.18
+go 1.22
 
 require github.com/cloudflare/cloudflare-go v0.94.0
 
